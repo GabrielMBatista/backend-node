@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model InterviewType {
+  id          String      @id @default(uuid())
+  name        String
+  description String?
+  categories  Category[]
+}
+
+model Category {
+  id             String               @id @default(uuid())
+  name           String
+  interviewType  InterviewType        @relation(fields: [interviewTypeId], references: [id])
+  interviewTypeId String
+  questions      QuestionInCategory[]
+  invitations    InterviewInvitation[]
+}
+
+model Question {
+  id          String   @id @default(uuid())
+  content     String
+  technologies String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  categories  QuestionInCategory[]
+  answers     Answer[]
+}
+
+model QuestionInCategory {
+  id         String   @id @default(uuid())
+  question   Question @relation(fields: [questionId], references: [id])
+  questionId String
+  category   Category @relation(fields: [categoryId], references: [id])
+  categoryId String
+  order      Int
+}
+
+model InterviewInvitation {
+  id             String           @id @default(cuid())
+  candidateName  String
+  candidateEmail String
+  category       Category         @relation(fields: [categoryId], references: [id])
+  categoryId     String
+  isCompleted    Boolean          @default(false)
+  session        InterviewSession?
+  createdAt      DateTime         @default(now())
+}
+
+model InterviewSession {
+  id          String    @id @default(uuid())
+  invitation  InterviewInvitation @relation(fields: [invitationId], references: [id])
+  invitationId String             @unique
+  answers     Answer[]
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  summary     String?
+  fullReport  String?
+  score       Float?
+}
+
+model Answer {
+  id         String         @id @default(uuid())
+  question   Question       @relation(fields: [questionId], references: [id])
+  questionId String
+  session    InterviewSession @relation(fields: [sessionId], references: [id])
+  sessionId  String
+  transcript String
+  analysis   String
+  audioUrl   String
+  createdAt  DateTime @default(now())
+  score      Int?
+}
