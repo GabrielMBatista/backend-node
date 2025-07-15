@@ -64,6 +64,7 @@ model InterviewSession {
   summary     String?
   fullReport  String?
   score       Float?
+  startTime   DateTime
 }
 
 model Answer {

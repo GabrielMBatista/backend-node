@@ -7,22 +7,39 @@ const router = Router();
 router.post("/api/sessions/start", async (req, res) => {
   console.log("[POST] /api/sessions/start → Iniciando requisição");
 
-  const { invitationId } = req.body;
+  const { invitationId, startTime } = req.body;
 
-  if (!invitationId) {
-    console.error("[POST] /api/sessions/start → invitationId ausente");
-    return res.status(400).json({ error: "invitationId é obrigatório." });
+  if (!invitationId || !startTime) {
+    console.error("[POST] /api/sessions/start → Campos obrigatórios ausentes");
+    return res.status(400).json({ error: "Todos os campos são obrigatórios." });
   }
 
   try {
-    const session = await prisma.interviewSession.create({
-      data: { invitationId },
+    let session = await prisma.interviewSession.findUnique({
+      where: { invitationId },
     });
-    console.log("[POST] /api/sessions/start → Sessão criada com sucesso");
-    res.json(session);
+
+    if (session) {
+      console.log(
+        "[POST] /api/sessions/start → Sessão existente encontrada, retomando..."
+      );
+      return res.status(200).json(session); // Retornar sessão existente
+    }
+
+    session = await prisma.interviewSession.create({
+      data: {
+        invitationId,
+        startTime,
+      },
+    });
+    console.log("[POST] /api/sessions/start → Nova sessão criada com sucesso");
+    res.status(201).json(session);
   } catch (error) {
-    console.error("[POST] /api/sessions/start → Erro ao criar sessão:", error);
-    res.status(500).json({ error: "Erro ao criar sessão." });
+    console.error(
+      "[POST] /api/sessions/start → Erro ao criar ou buscar sessão:",
+      error
+    );
+    res.status(500).json({ error: "Erro ao criar ou buscar sessão." });
   }
 });
 
