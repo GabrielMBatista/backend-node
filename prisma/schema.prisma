@@ -65,6 +65,7 @@ model InterviewSession {
   fullReport  String?
   score       Float?
   startTime   DateTime
+  evaluatedAt DateTime? 
 }
 
 model Answer {
@@ -75,7 +76,7 @@ model Answer {
   sessionId  String
   transcript String
   analysis   String
-  audioUrl   String
+  audioBlob  Bytes?
   createdAt  DateTime @default(now())
-  score      Int?
+  score      Int?           
 }

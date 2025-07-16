@@ -4,8 +4,8 @@ import cors from "cors";
 import interviewTypesRoutes from "./routes/interviewTypes";
 import categoriesRoutes from "./routes/categories";
 import invitationsRoutes from "./routes/invitations";
-import sessionsRoutes from "./routes/sessions";
 import questionsRouter from "./routes/questions";
+import transcribeRoutes from "./routes/transcribe";
 
 dotenv.config();
 console.log("DATABASE_URL:", process.env.DATABASE_URL);
@@ -19,6 +19,9 @@ app.use(interviewTypesRoutes);
 app.use(questionsRouter);
 app.use(categoriesRoutes);
 app.use(invitationsRoutes);
+app.use(transcribeRoutes);
+
+import sessionsRoutes from "./routes/sessions";
 app.use(sessionsRoutes);
 
 app.listen(PORT, () => {
