@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Buffer } from "buffer";
 import { getPrismaClient } from "../lib/prisma";
 import {
   evaluateSessionWithOpenAI,
@@ -6,10 +7,19 @@ import {
 } from "../lib/openai"; // Importa função utilitária
 import { evaluationQueue } from "../lib/localQueue";
 import { getCompletedSessions } from "../controllers/sessionsController";
+import multer from "multer";
 
 const prisma = getPrismaClient();
 
 const router = Router();
+const upload = multer({
+  fileFilter: (req, file, cb) => {
+    if (file.fieldname !== "audio") {
+      return cb(new Error("Campo de arquivo inesperado. Esperado: 'audio'"));
+    }
+    cb(null, true);
+  },
+});
 
 // Rota para iniciar uma sessão
 router.post("/api/sessions/start", async (req, res) => {
@@ -86,41 +96,49 @@ router.post("/api/sessions/:id/finish", async (req, res) => {
 });
 
 // Rota para salvar uma resposta
-router.post("/api/sessions/:id/answer", async (req, res) => {
-  console.log("[POST] /api/sessions/:id/answer → Iniciando requisição");
+router.post(
+  "/api/sessions/:id/answer",
+  upload.single("audio"),
+  async (req, res) => {
+    console.log("[POST] /api/sessions/:id/answer → Iniciando requisição");
 
-  const sessionId = req.params.id;
-  const { questionId, transcript, audioBlob } = req.body; // Removido audioUrl
-  console.log("req.body", req.body);
-  if (!sessionId || !questionId || !transcript) {
-    console.error(
-      "[POST] /api/sessions/:id/answer → Campos obrigatórios ausentes"
-    );
-    return res.status(400).json({
-      error: "Campos obrigatórios: sessionId, questionId e transcript.",
-    });
-  }
+    const sessionId = req.params.id;
+    const { questionId, transcript } = req.body;
+    const audioFile = req.file;
 
-  try {
-    const answer = await prisma.answer.create({
-      data: {
-        sessionId,
-        questionId,
-        transcript,
-        audioBlob: audioBlob,
-        analysis: "Default analysis",
-      },
-    });
-    console.log("[POST] /api/sessions/:id/answer → Resposta salva com sucesso");
-    res.status(201).json(answer);
-  } catch (error) {
-    console.error(
-      "[POST] /api/sessions/:id/answer → Erro ao salvar resposta:",
-      error
-    );
-    res.status(500).json({ error: "Erro ao salvar resposta." });
+    if (!sessionId || !questionId || !transcript) {
+      console.error(
+        "[POST] /api/sessions/:id/answer → Campos obrigatórios ausentes"
+      );
+      return res.status(400).json({
+        error:
+          "Campos obrigatórios: sessionId, questionId, transcript e audio.",
+      });
+    }
+
+    try {
+      const answer = await prisma.answer.create({
+        data: {
+          sessionId,
+          questionId,
+          transcript,
+          audioBlob: null, // Inicialmente nulo, será atualizado com o buffer do arquivo
+          analysis: "Default analysis",
+        },
+      });
+      console.log(
+        "[POST] /api/sessions/:id/answer → Resposta salva com sucesso"
+      );
+      res.status(201).json(answer);
+    } catch (error) {
+      console.error(
+        "[POST] /api/sessions/:id/answer → Erro ao salvar resposta:",
+        error
+      );
+      res.status(500).json({ error: "Erro ao salvar resposta." });
+    }
   }
-});
+);
 
 // Rota para obter resumo de perguntas e respostas
 router.get("/api/sessions/:id/summary", async (req, res) => {
@@ -202,6 +220,13 @@ router.post("/api/sessions/:id/evaluate", async (req, res) => {
   try {
     const session = await prisma.interviewSession.findUnique({
       where: { id },
+      include: {
+        invitation: {
+          include: {
+            category: true, // Inclui a categoria associada ao convite
+          },
+        },
+      },
     });
 
     if (!session) {
@@ -228,11 +253,12 @@ router.post("/api/sessions/:id/evaluate", async (req, res) => {
 
       const sessionWithAnswers = await prisma.interviewSession.findUnique({
         where: { id },
-        include: { answers: { include: { question: true } } }, // Certifique-se de incluir as perguntas
+        include: { answers: { include: { question: true } } },
       });
 
       if (!sessionWithAnswers) {
-        throw new Error(`Sessão não encontrada: ${id}`);
+        console.error(`[Fila local] → Sessão não encontrada: ${id}`);
+        return; // Ensure the function resolves to void
       }
 
       console.log(
@@ -240,11 +266,41 @@ router.post("/api/sessions/:id/evaluate", async (req, res) => {
         sessionWithAnswers.answers
       );
 
+      const session = await prisma.interviewSession.findUnique({
+        where: { id },
+        include: {
+          invitation: {
+            include: {
+              category: true,
+            },
+          },
+        },
+      });
+
+      if (!session) {
+        console.error(`[Fila local] → Sessão não encontrada: ${id}`);
+        return; // Ensure the function resolves to void
+      }
+
       const evaluationResult = await evaluateSessionWithOpenAI(
-        sessionWithAnswers.answers
+        sessionWithAnswers.answers,
+        session.invitation.category
       );
+
+      if (!evaluationResult) {
+        console.error("[POST] /api/sessions/:id/evaluate → Erro na avaliação");
+        return; // Ensure the function resolves to void
+      }
+
       const [summary, fullReport, score] =
         parseEvaluationResult(evaluationResult);
+
+      if (!summary || !fullReport || score === undefined) {
+        console.error(
+          "[POST] /api/sessions/:id/evaluate → Erro ao processar resultado da avaliação"
+        );
+        return; // Ensure the function resolves to void
+      }
 
       await prisma.interviewSession.update({
         where: { id },
@@ -271,6 +327,83 @@ router.post("/api/sessions/:id/evaluate", async (req, res) => {
       error
     );
     res.status(500).json({ error: "Erro ao adicionar sessão à fila." });
+  }
+});
+
+// Rota para reenviar uma avaliação
+router.post("/api/sessions/:id/re-evaluate", async (req, res) => {
+  console.log("[POST] /api/sessions/:id/re-evaluate → Iniciando requisição");
+
+  const { id } = req.params;
+
+  try {
+    const sessionWithAnswers = await prisma.interviewSession.findUnique({
+      where: { id },
+      include: {
+        answers: { include: { question: true } },
+        invitation: {
+          include: {
+            category: true,
+          },
+        },
+      },
+    });
+
+    if (!sessionWithAnswers) {
+      console.error(
+        "[POST] /api/sessions/:id/re-evaluate → Sessão não encontrada"
+      );
+      return res.status(404).json({ error: "Sessão não encontrada." });
+    }
+
+    console.log(
+      "[POST] /api/sessions/:id/re-evaluate → Dados da sessão obtidos:",
+      sessionWithAnswers.answers
+    );
+
+    const evaluationResult = await evaluateSessionWithOpenAI(
+      sessionWithAnswers.answers,
+      sessionWithAnswers.invitation.category
+    );
+
+    if (!evaluationResult) {
+      console.error("[POST] /api/sessions/:id/re-evaluate → Erro na avaliação");
+      throw new Error("Erro na avaliação com OpenAI.");
+    }
+
+    const [summary, fullReport, score] =
+      parseEvaluationResult(evaluationResult);
+
+    if (!summary || !fullReport || score === undefined) {
+      console.error(
+        "[POST] /api/sessions/:id/re-evaluate → Erro ao processar resultado da avaliação"
+      );
+      throw new Error("Erro ao processar resultado da avaliação.");
+    }
+
+    // Serializa o fullReport como string JSON
+    const serializedFullReport = JSON.stringify(fullReport);
+
+    const updatedSession = await prisma.interviewSession.update({
+      where: { id },
+      data: {
+        summary,
+        fullReport: serializedFullReport, // Envia como string JSON
+        score,
+        evaluatedAt: new Date(),
+      },
+    });
+
+    console.log(
+      "[POST] /api/sessions/:id/re-evaluate → Avaliação reenviada com sucesso"
+    );
+    res.json(updatedSession);
+  } catch (error) {
+    console.error(
+      "[POST] /api/sessions/:id/re-evaluate → Erro ao reenviar avaliação:",
+      error
+    );
+    res.status(500).json({ error: "Erro ao reenviar avaliação." });
   }
 });
 

@@ -4,9 +4,17 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY, // Certifique-se de configurar a variável de ambiente
 });
 
-export async function evaluateSessionWithOpenAI(answers: any[]) {
+export async function evaluateSessionWithOpenAI(
+  answers: any[],
+  category: { name: string }
+): Promise<string> {
   try {
-    const prompt = generateEvaluationPrompt(answers);
+    if (!answers || answers.length === 0) {
+      throw new Error("Nenhuma resposta fornecida para avaliação.");
+    }
+
+    const prompt = generateEvaluationPrompt(answers, category);
+    console.log("[evaluateSessionWithOpenAI] → Prompt gerado:", prompt);
 
     const response = await openai.chat.completions.create({
       model: "gpt-4", // Use o modelo apropriado
@@ -17,9 +25,15 @@ export async function evaluateSessionWithOpenAI(answers: any[]) {
       max_tokens: 500,
     });
 
+    if (!response || !response.choices || response.choices.length === 0) {
+      throw new Error("Resposta inválida ou vazia da OpenAI.");
+    }
+
     console.log(
-      "[evaluateSessionWithOpenAI] → Avaliação realizada com sucesso"
+      "[evaluateSessionWithOpenAI] → Resposta da OpenAI recebida:",
+      response
     );
+
     const messageContent = response.choices[0]?.message?.content;
     if (!messageContent) {
       throw new Error("A resposta da OpenAI não contém conteúdo válido.");
@@ -34,54 +48,139 @@ export async function evaluateSessionWithOpenAI(answers: any[]) {
   }
 }
 
-function generateEvaluationPrompt(answers: any[]): string {
+function generateEvaluationPrompt(
+  answers: any[],
+  category: { name: string }
+): string {
+  if (!answers || answers.length === 0) {
+    throw new Error("Nenhuma resposta fornecida para gerar o prompt.");
+  }
+
+  if (!category || !category.name) {
+    throw new Error(
+      "Categoria inválida fornecida para o contexto da entrevista."
+    );
+  }
+
   let prompt =
-    "Você é um avaliador técnico especialista em programação. Avalie as seguintes respostas de uma entrevista técnica:\n\n";
+    `O nível da entrevista é: ${category.name}.\n` +
+    "Leve esse contexto em consideração ao avaliar as respostas da entrevista técnica e retorne exclusivamente um JSON estruturado com os seguintes campos:\n\n" +
+    `{
+  "summary": "Mensagem amigável para o candidato.",
+  "fullReport": {
+    "nivelDeConhecimento": "Avaliação do domínio técnico geral.",
+    "comunicacao": "Como o candidato se comunica e articula ideias técnicas.",
+    "pontosFortes": ["Lista de pontos positivos identificados."],
+    "pontosDeMelhoria": ["Lista de pontos que precisam evoluir."],
+    "potencialDeCrescimento": "Comentário sobre potencial futuro ou adaptabilidade caso exista deve ser direto."
+  },
+  "score": 0-100
+}\n\n` +
+    "Não inclua nenhum texto fora do JSON. Apenas o JSON puro.\n\n";
+
+  let validAnswersCount = 0;
 
   answers.forEach((answer, index) => {
-    if (!answer.question || !answer.question.text) {
+    if (
+      !answer ||
+      !answer.transcript ||
+      answer.transcript.trim().length === 0
+    ) {
       console.warn(
-        `[generateEvaluationPrompt] → Resposta inválida ignorada:`,
+        `[generateEvaluationPrompt] → Resposta ignorada por falta de transcrição válida:`,
         answer
       );
-      return; // Ignorar respostas sem perguntas associadas
+      return; // Ignorar respostas sem transcrição válida
     }
 
-    prompt += `Pergunta ${index + 1}: ${answer.question.text}\n`;
-    prompt += `Resposta: ${answer.transcript}\n\n`;
+    const questionContent =
+      answer.question?.content || "[Pergunta indisponível]";
+
+    prompt += `Pergunta ${index + 1}: ${questionContent}\n`;
+    prompt += `Resposta: ${answer.transcript.trim()}\n\n`;
+    validAnswersCount++;
   });
 
-  prompt += `Forneça os seguintes itens em sua avaliação:
-1. Um resumo amigável e reconfortante para o candidato, destacando erros e acertos, pontos fortes observados e detalhes obtidos.
-2. Um relatório completo voltado para um analista de RH, contendo tudo que ele precisa saber sobre este candidato, incluindo habilidades técnicas, capacidade de comunicação e potencial de crescimento.
-3. Uma pontuação geral baseada na performance do candidato.`;
+  if (validAnswersCount === 0) {
+    throw new Error("Nenhuma resposta válida encontrada para gerar o prompt.");
+  }
 
+  console.log("[generateEvaluationPrompt] → Prompt final:", prompt);
   return prompt;
 }
 
 export function parseEvaluationResult(
   evaluationResult: string
-): [string, string, number] {
+): [string, any, number] {
   try {
-    const summaryMatch = evaluationResult.match(/Resumo:\s*(.+)/);
-    const fullReportMatch = evaluationResult.match(
-      /Relatório Completo:\s*(.+)/
+    if (!evaluationResult || typeof evaluationResult !== "string") {
+      throw new Error("Resultado da avaliação inválido ou vazio.");
+    }
+
+    console.log(
+      "[parseEvaluationResult] → Resultado recebido:",
+      evaluationResult
     );
-    const scoreMatch = evaluationResult.match(/Pontuação:\s*(\d+)/);
 
-    const summary = summaryMatch ? summaryMatch[1] : "Resumo não disponível.";
-    const fullReport = fullReportMatch
-      ? fullReportMatch[1]
-      : "Relatório não disponível.";
-    const score = scoreMatch ? parseFloat(scoreMatch[1]) : 0;
+    const parsed = JSON.parse(evaluationResult);
 
-    console.log("[parseEvaluationResult] → Resultados extraídos com sucesso");
+    const summary =
+      typeof parsed.summary === "string"
+        ? parsed.summary.trim()
+        : "Resumo não disponível.";
+
+    const fullReport =
+      parsed.fullReport && typeof parsed.fullReport === "object"
+        ? {
+            nivelDeConhecimento:
+              parsed.fullReport.nivelDeConhecimento || "Não disponível.",
+            comunicacao: parsed.fullReport.comunicacao || "Não disponível.",
+            pontosFortes: Array.isArray(parsed.fullReport.pontosFortes)
+              ? parsed.fullReport.pontosFortes
+              : [],
+            pontosDeMelhoria: Array.isArray(parsed.fullReport.pontosDeMelhoria)
+              ? parsed.fullReport.pontosDeMelhoria
+              : [],
+            potencialDeCrescimento:
+              parsed.fullReport.potencialDeCrescimento || "Não disponível.",
+          }
+        : {
+            nivelDeConhecimento: "Não disponível.",
+            comunicacao: "Não disponível.",
+            pontosFortes: [],
+            pontosDeMelhoria: [],
+            potencialDeCrescimento: "Não disponível.",
+          };
+
+    const score =
+      typeof parsed.score === "number" &&
+      parsed.score >= 0 &&
+      parsed.score <= 100
+        ? parsed.score
+        : 0;
+
+    console.log("[parseEvaluationResult] → Resultados extraídos:", {
+      summary,
+      fullReport,
+      score,
+    });
+
     return [summary, fullReport, score];
   } catch (error) {
     console.error(
       "[parseEvaluationResult] → Erro ao processar resultado:",
       error
     );
-    throw new Error("Erro ao processar resultado da avaliação.");
+    return [
+      "Resumo não disponível.",
+      {
+        nivelDeConhecimento: "Não disponível.",
+        comunicacao: "Não disponível.",
+        pontosFortes: [],
+        pontosDeMelhoria: [],
+        potencialDeCrescimento: "Não disponível.",
+      },
+      0,
+    ];
   }
 }
