@@ -1,13 +1,19 @@
 import { Router } from "express";
 import multer from "multer";
 import fs from "fs";
+import path from "path";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const router = Router();
-const upload = multer({ dest: "uploads/" });
+
+// Usar a pasta temporária do sistema (/tmp)
+const tempDir = "/tmp/uploads";
+fs.mkdirSync(tempDir, { recursive: true });
+
+const upload = multer({ dest: tempDir });
 
 router.post("/api/transcribe", upload.single("audio"), async (req, res) => {
   console.log("[POST] /api/transcribe → Iniciando requisição");
@@ -23,6 +29,7 @@ router.post("/api/transcribe", upload.single("audio"), async (req, res) => {
   const renamedPath = originalPath + ext;
 
   try {
+    // Renomeia o arquivo para garantir a extensão correta
     fs.renameSync(originalPath, renamedPath);
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
