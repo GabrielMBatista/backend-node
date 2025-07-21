@@ -5,11 +5,13 @@
   "scripts": {
     "dev": "ts-node-dev src/app.ts",
     "build": "tsc",
+    "postinstall": "prisma generate",
     "start": "node dist/app.js"
   },
   "dependencies": {
     "@prisma/client": "^6.11.1",
     "@prisma/extension-accelerate": "^2.0.2",
+    "@vercel/node": "^5.3.6",
     "bullmq": "^5.56.4",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",

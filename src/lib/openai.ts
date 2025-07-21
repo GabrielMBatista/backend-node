@@ -64,6 +64,7 @@ function generateEvaluationPrompt(
 
   let prompt =
     `O nível da entrevista é: ${category.name}.\n` +
+    "a unica resposta focada para o usuario é o resumo no resumo seja mais imparcial sem entregar se o usuario foi bem ou mal porem aponte coisas que ele acertou e errou seguindo a logica de entrevistas Sandwich, todo o resto deve focar na experiência do avaliador. ex Potencial de Crescimento caso o usuario não demonstre nenhum ou pouco potencial podemos informar ao avaliador que o usuario parece não se encaixar na vaga de forma direta e sincera\n" +
     "Leve esse contexto em consideração ao avaliar as respostas da entrevista técnica e retorne exclusivamente um JSON estruturado com os seguintes campos:\n\n" +
     `{
   "summary": "Mensagem amigável para o candidato.",

@@ -7,5 +7,5 @@
     "strict": true,
     "esModuleInterop": true
   },
-  "include": ["src/**/*", "uploads/transcribe.ts"]
+  "include": ["src/**/*", "src", "api", "uploads/transcribe.ts", "api"]
 }
