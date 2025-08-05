@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 router.get("/api/questions", async (req, res) => {
   console.log("[GET] /api/questions → Iniciando requisição");
 
-  const { categoryId } = req.query;
+  const { categoryId, page = 1, limit = 10, search } = req.query;
 
   if (!categoryId || typeof categoryId !== "string") {
     console.error("[GET] /api/questions → categoryId inválido ou ausente");
@@ -17,22 +17,40 @@ router.get("/api/questions", async (req, res) => {
   }
 
   try {
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const questionIds = (
+      await prisma.questionInCategory.findMany({
+        where: { categoryId },
+        select: { questionId: true },
+      })
+    ).map((qic) => qic.questionId);
+
     const questions = await prisma.question.findMany({
       where: {
-        id: {
-          in: (
-            await prisma.questionInCategory.findMany({
-              where: { categoryId },
-              select: { questionId: true },
-            })
-          ).map((qic) => qic.questionId),
-        },
+        id: { in: questionIds },
+        ...(typeof search === "string" ? { content: { contains: search as string, mode: "insensitive" } } : {}),
+      },
+      skip,
+      take: Number(limit),
+    });
+
+    const total = await prisma.question.count({
+      where: {
+        id: { in: questionIds },
+        ...(typeof search === "string" ? { content: { contains: search as string, mode: "insensitive" } } : {}),
       },
     });
+
     console.log(
       `[GET] /api/questions → ${questions.length} perguntas encontradas`
     );
-    res.json(questions);
+    res.json({
+      data: questions,
+      total,
+      page: Number(page),
+      limit: Number(limit),
+    });
   } catch (error) {
     console.error("[GET] /api/questions → Erro ao buscar perguntas:", error);
     res.status(500).json({ error: "Erro ao buscar perguntas." });
@@ -42,12 +60,34 @@ router.get("/api/questions", async (req, res) => {
 router.get("/api/questions/all", async (req, res) => {
   console.log("[GET] /api/questions/all → Iniciando requisição");
 
+  const { page = 1, limit = 10, search } = req.query;
+
   try {
-    const questions = await prisma.question.findMany();
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const questions = await prisma.question.findMany({
+      where: {
+        ...(typeof search === "string" ? { content: { contains: search as string, mode: "insensitive" } } : {}),
+      },
+      skip,
+      take: Number(limit),
+    });
+
+    const total = await prisma.question.count({
+      where: {
+        ...(typeof search === "string" ? { content: { contains: search as string, mode: "insensitive" } } : {}),
+      },
+    });
+
     console.log(
       `[GET] /api/questions/all → ${questions.length} perguntas encontradas`
     );
-    res.json(questions);
+    res.json({
+      data: questions,
+      total,
+      page: Number(page),
+      limit: Number(limit),
+    });
   } catch (error) {
     console.error(
       "[GET] /api/questions/all → Erro ao buscar todas as perguntas:",

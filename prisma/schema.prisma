@@ -38,9 +38,11 @@ model QuestionInCategory {
   id         String   @id @default(uuid())
   question   Question @relation(fields: [questionId], references: [id])
   questionId String
-  category   Category @relation(fields: [categoryId], references: [id])
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade) // Configurar remoção em cascata
   categoryId String
   order      Int
+
+  @@unique([questionId, categoryId]) // Garantir unicidade de questionId dentro de uma categoria
 }
 
 model InterviewInvitation {

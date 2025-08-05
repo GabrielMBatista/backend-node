@@ -9,6 +9,7 @@
     "start": "node dist/app.js"
   },
   "dependencies": {
+    "@faker-js/faker": "^9.9.0",
     "@prisma/client": "^6.11.1",
     "@prisma/extension-accelerate": "^2.0.2",
     "@vercel/node": "^5.3.6",

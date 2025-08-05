@@ -306,7 +306,7 @@ router.post("/api/sessions/:id/evaluate", async (req, res) => {
         where: { id },
         data: {
           summary,
-          fullReport,
+          fullReport: JSON.stringify(fullReport), // Serializa o fullReport como string JSON
           score,
           evaluatedAt: new Date(),
         },
@@ -409,27 +409,132 @@ router.post("/api/sessions/:id/re-evaluate", async (req, res) => {
 
 // Rota para retornar uma lista de sessões concluídas com filtros por colunas e datas
 router.get("/api/sessions/completed", async (req, res) => {
+  console.log("[GET] /api/sessions/completed → Iniciando requisição");
+
+  const {
+    startDate,
+    endDate,
+    page = 1,
+    limit = 10,
+    sortBy = "completedAt",
+    sortOrder = "asc",
+  } = req.query;
+
   try {
-    const { startDate, endDate, columns } = req.query;
+    const filters: any = {
+      completedAt: {},
+    };
 
-    // Validação dos parâmetros
-    if (startDate && isNaN(Date.parse(startDate as string))) {
-      return res.status(400).json({ error: "Data inicial inválida." });
+    if (startDate && !isNaN(Date.parse(startDate as string))) {
+      filters.completedAt.gte = new Date(startDate as string);
     }
-    if (endDate && isNaN(Date.parse(endDate as string))) {
-      return res.status(400).json({ error: "Data final inválida." });
+    if (endDate && !isNaN(Date.parse(endDate as string))) {
+      filters.completedAt.lte = new Date(endDate as string);
     }
 
-    const sessions = await getCompletedSessions({
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
-      columns: columns ? (columns as string).split(",") : undefined,
+    // Remover o filtro `completedAt` se estiver vazio
+    if (Object.keys(filters.completedAt).length === 0) {
+      delete filters.completedAt;
+    }
+
+    const sessions = await prisma.interviewSession.findMany({
+      where: filters,
+      include: {
+        invitation: {
+          select: {
+            candidateName: true,
+            category: {
+              select: {
+                name: true,
+                interviewType: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        answers: {
+          select: {
+            question: {
+              select: {
+                content: true,
+              },
+            },
+            transcript: true,
+          },
+        },
+      },
     });
 
-    res.json(sessions);
+    // Realizar a ordenação manual para todos os dados antes da paginação
+    const validSortFields = [
+      "candidateName",
+      "score",
+      "completedAt",
+      "category",
+      "interviewType",
+    ];
+    const isValidSortField = validSortFields.includes(sortBy as string);
+
+    const sortedSessions = isValidSortField
+      ? sessions.sort((a, b) => {
+          const fieldA =
+            sortBy === "candidateName"
+              ? a.invitation.candidateName
+              : sortBy === "category"
+              ? a.invitation.category.name
+              : sortBy === "interviewType"
+              ? a.invitation.category.interviewType.name
+              : a[sortBy as keyof typeof a];
+          const fieldB =
+            sortBy === "candidateName"
+              ? b.invitation.candidateName
+              : sortBy === "category"
+              ? b.invitation.category.name
+              : sortBy === "interviewType"
+              ? b.invitation.category.interviewType.name
+              : b[sortBy as keyof typeof b];
+
+          if ((fieldA ?? "") < (fieldB ?? ""))
+            return sortOrder === "asc" ? -1 : 1;
+          if ((fieldA ?? "") > (fieldB ?? ""))
+            return sortOrder === "asc" ? 1 : -1;
+          return 0;
+        })
+      : sessions;
+
+    // Aplicar paginação após a ordenação
+    const paginatedSessions = sortedSessions.slice(
+      (Number(page) - 1) * Number(limit),
+      Number(page) * Number(limit)
+    );
+
+    const formattedSessions = paginatedSessions.map((session) => ({
+      id: session.id,
+      candidateName: session.invitation.candidateName,
+      score: session.score,
+      completedAt: session.completedAt,
+      category: session.invitation.category.name,
+      interviewType: session.invitation.category.interviewType.name,
+      summary: session.summary || "",
+      fullReport: session.fullReport || "",
+      answers: session.answers.map((answer) => ({
+        question: answer.question.content,
+        transcript: answer.transcript,
+      })),
+    }));
+
+    res.json({
+      data: formattedSessions,
+      total: sessions.length,
+      page: Number(page),
+      limit: Number(limit),
+    });
   } catch (error) {
     console.error(
-      "[GET /api/sessions/completed] → Erro ao buscar sessões concluídas:",
+      "[GET] /api/sessions/completed → Erro ao buscar sessões concluídas:",
       error
     );
     res.status(500).json({ error: "Erro ao buscar sessões concluídas." });
