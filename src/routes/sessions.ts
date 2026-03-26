@@ -21,6 +21,20 @@ const upload = multer({
   },
 });
 
+// Helper function to extract sort values
+const getSortFieldValue = (session: any, sortBy: string) => {
+  switch (sortBy) {
+    case "candidateName":
+      return session.invitation.candidateName;
+    case "category":
+      return session.invitation.category.name;
+    case "interviewType":
+      return session.invitation.category.interviewType.name;
+    default:
+      return session[sortBy as keyof typeof session];
+  }
+};
+
 // Rota para iniciar uma sessão
 router.post("/api/sessions/start", async (req, res) => {
   console.log("[POST] /api/sessions/start → Iniciando requisição");
@@ -480,29 +494,15 @@ router.get("/api/sessions/completed", async (req, res) => {
 
     const sortedSessions = isValidSortField
       ? sessions.sort((a, b) => {
-          const fieldA =
-            sortBy === "candidateName"
-              ? a.invitation.candidateName
-              : sortBy === "category"
-              ? a.invitation.category.name
-              : sortBy === "interviewType"
-              ? a.invitation.category.interviewType.name
-              : a[sortBy as keyof typeof a];
-          const fieldB =
-            sortBy === "candidateName"
-              ? b.invitation.candidateName
-              : sortBy === "category"
-              ? b.invitation.category.name
-              : sortBy === "interviewType"
-              ? b.invitation.category.interviewType.name
-              : b[sortBy as keyof typeof b];
+        const fieldA = getSortFieldValue(a, sortBy as string);
+        const fieldB = getSortFieldValue(b, sortBy as string);
 
-          if ((fieldA ?? "") < (fieldB ?? ""))
-            return sortOrder === "asc" ? -1 : 1;
-          if ((fieldA ?? "") > (fieldB ?? ""))
-            return sortOrder === "asc" ? 1 : -1;
-          return 0;
-        })
+        if ((fieldA ?? "") < (fieldB ?? ""))
+          return sortOrder === "asc" ? -1 : 1;
+        if ((fieldA ?? "") > (fieldB ?? ""))
+          return sortOrder === "asc" ? 1 : -1;
+        return 0;
+      })
       : sessions;
 
     // Aplicar paginação após a ordenação

@@ -1,7 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
 import fs from "fs";
-import path from "path";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 
