@@ -13,13 +13,13 @@ router.get("/api/interview-types", async (req, res) => {
       `[GET] /api/interview-types → ${interviewTypes.length} tipos encontrados`
     );
 
-    res.json(interviewTypes);
+    return res.json(interviewTypes);
   } catch (error) {
     console.error(
       "[GET] /api/interview-types → Erro ao buscar tipos de entrevista:",
       error
     );
-    res.status(500).json({ error: "Erro ao buscar tipos de entrevista." });
+    return res.status(500).json({ error: "Erro ao buscar tipos de entrevista." });
   }
 });
 

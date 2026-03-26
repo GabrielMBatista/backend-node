@@ -59,7 +59,7 @@ router.get("/api/categories", async (req, res) => {
     console.log(
       `[GET] /api/categories → ${categories.length} categorias encontradas`
     );
-    res.json({
+    return res.json({
       data: categoriesWithQuestionData,
       total,
       page: Number(page),
@@ -67,7 +67,7 @@ router.get("/api/categories", async (req, res) => {
     });
   } catch (error) {
     console.error("[GET] /api/categories → Erro ao buscar categorias:", error);
-    res.status(500).json({ error: "Erro ao buscar categorias." });
+    return res.status(500).json({ error: "Erro ao buscar categorias." });
   }
 });
 
@@ -91,10 +91,10 @@ router.post("/api/categories", async (req, res) => {
       "[POST] /api/categories → Categoria criada com sucesso:",
       category
     );
-    res.status(201).json(category);
+    return res.status(201).json(category);
   } catch (error) {
     console.error("[POST] /api/categories → Erro ao criar categoria:", error);
-    res.status(500).json({ error: "Erro ao criar categoria." });
+    return res.status(500).json({ error: "Erro ao criar categoria." });
   }
 });
 
@@ -121,13 +121,13 @@ router.put("/api/categories/:id", async (req, res) => {
       "[PUT] /api/categories/:id → Categoria atualizada com sucesso:",
       category
     );
-    res.json(category);
+    return res.json(category);
   } catch (error) {
     console.error(
       "[PUT] /api/categories/:id → Erro ao atualizar categoria:",
       error
     );
-    res.status(500).json({ error: "Erro ao atualizar categoria." });
+    return res.status(500).json({ error: "Erro ao atualizar categoria." });
   }
 });
 
@@ -172,7 +172,7 @@ router.post("/api/categories/:categoryId/questions", async (req, res) => {
     console.log(
       "[POST] /api/categories/:categoryId/questions → Perguntas vinculadas à categoria com sucesso"
     );
-    res
+    return res
       .status(201)
       .json({ message: "Perguntas vinculadas à categoria com sucesso." });
   } catch (error) {
@@ -180,7 +180,7 @@ router.post("/api/categories/:categoryId/questions", async (req, res) => {
       "[POST] /api/categories/:categoryId/questions → Erro ao vincular perguntas à categoria:",
       error
     );
-    res.status(500).json({ error: "Erro ao vincular perguntas à categoria." });
+    return res.status(500).json({ error: "Erro ao vincular perguntas à categoria." });
   }
 });
 
@@ -213,13 +213,13 @@ router.delete(
       console.log(
         "[DELETE] /api/categories/:categoryId/questions/:questionId → Vínculo removido com sucesso"
       );
-      res.status(200).json({ message: "Vínculo removido com sucesso." });
+      return res.status(200).json({ message: "Vínculo removido com sucesso." });
     } catch (error) {
       console.error(
         "[DELETE] /api/categories/:categoryId/questions/:questionId → Erro ao remover vínculo:",
         error
       );
-      res.status(500).json({ error: "Erro ao remover vínculo." });
+      return res.status(500).json({ error: "Erro ao remover vínculo." });
     }
   }
 );
@@ -261,13 +261,13 @@ router.delete("/api/categories/:id", async (req, res) => {
     console.log(
       "[DELETE] /api/categories/:id → Categoria deletada com sucesso"
     );
-    res.status(200).json({ message: "Categoria deletada com sucesso." });
+    return res.status(200).json({ message: "Categoria deletada com sucesso." });
   } catch (error) {
     console.error(
       "[DELETE] /api/categories/:id → Erro ao deletar categoria:",
       error
     );
-    res.status(500).json({ error: "Erro ao deletar categoria." });
+    return res.status(500).json({ error: "Erro ao deletar categoria." });
   }
 });
 

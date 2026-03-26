@@ -65,13 +65,13 @@ router.post("/api/sessions/start", async (req, res) => {
       },
     });
     console.log("[POST] /api/sessions/start → Nova sessão criada com sucesso");
-    res.status(201).json(session);
+    return res.status(201).json(session);
   } catch (error) {
     console.error(
       "[POST] /api/sessions/start → Erro ao criar ou buscar sessão:",
       error
     );
-    res.status(500).json({ error: "Erro ao criar ou buscar sessão." });
+    return res.status(500).json({ error: "Erro ao criar ou buscar sessão." });
   }
 });
 
@@ -99,13 +99,13 @@ router.post("/api/sessions/:id/finish", async (req, res) => {
       "[POST] /api/sessions/:id/finish → Sessão finalizada com sucesso",
       session
     );
-    res.json(session);
+    return res.json(session);
   } catch (error) {
     console.error(
       "[POST] /api/sessions/:id/finish → Erro ao finalizar sessão:",
       error
     );
-    res.status(500).json({ error: "Erro ao finalizar sessão." });
+    return res.status(500).json({ error: "Erro ao finalizar sessão." });
   }
 });
 
@@ -143,13 +143,13 @@ router.post(
       console.log(
         "[POST] /api/sessions/:id/answer → Resposta salva com sucesso"
       );
-      res.status(201).json(answer);
+      return res.status(201).json(answer);
     } catch (error) {
       console.error(
         "[POST] /api/sessions/:id/answer → Erro ao salvar resposta:",
         error
       );
-      res.status(500).json({ error: "Erro ao salvar resposta." });
+      return res.status(500).json({ error: "Erro ao salvar resposta." });
     }
   }
 );
@@ -178,13 +178,13 @@ router.get("/api/sessions/:id/summary", async (req, res) => {
     }
 
     console.log("[GET] /api/sessions/:id/summary → Resumo obtido com sucesso");
-    res.json(session);
+    return res.json(session);
   } catch (error) {
     console.error(
       "[GET] /api/sessions/:id/summary → Erro ao obter resumo:",
       error
     );
-    res.status(500).json({ error: "Erro ao obter resumo." });
+    return res.status(500).json({ error: "Erro ao obter resumo." });
   }
 });
 
@@ -215,13 +215,13 @@ router.put("/api/sessions/:sessionId/answers/:answerId", async (req, res) => {
     console.log(
       "[PUT] /api/sessions/:sessionId/answers/:answerId → Transcrição atualizada com sucesso"
     );
-    res.json(answer);
+    return res.json(answer);
   } catch (error) {
     console.error(
       "[PUT] /api/sessions/:sessionId/answers/:answerId → Erro ao atualizar transcrição:",
       error
     );
-    res.status(500).json({ error: "Erro ao atualizar transcrição." });
+    return res.status(500).json({ error: "Erro ao atualizar transcrição." });
   }
 });
 
@@ -332,7 +332,7 @@ router.post("/api/sessions/:id/evaluate", async (req, res) => {
     console.log(
       "[POST] /api/sessions/:id/evaluate → Sessão adicionada à fila local"
     );
-    res.json({
+    return res.json({
       message: "Sessão adicionada à fila local.",
     });
   } catch (error) {
@@ -340,7 +340,7 @@ router.post("/api/sessions/:id/evaluate", async (req, res) => {
       "[POST] /api/sessions/:id/evaluate → Erro ao adicionar sessão à fila:",
       error
     );
-    res.status(500).json({ error: "Erro ao adicionar sessão à fila." });
+    return res.status(500).json({ error: "Erro ao adicionar sessão à fila." });
   }
 });
 
@@ -411,13 +411,13 @@ router.post("/api/sessions/:id/re-evaluate", async (req, res) => {
     console.log(
       "[POST] /api/sessions/:id/re-evaluate → Avaliação reenviada com sucesso"
     );
-    res.json(updatedSession);
+    return res.json(updatedSession);
   } catch (error) {
     console.error(
       "[POST] /api/sessions/:id/re-evaluate → Erro ao reenviar avaliação:",
       error
     );
-    res.status(500).json({ error: "Erro ao reenviar avaliação." });
+    return res.status(500).json({ error: "Erro ao reenviar avaliação." });
   }
 });
 
@@ -497,9 +497,12 @@ router.get("/api/sessions/completed", async (req, res) => {
         const fieldA = getSortFieldValue(a, sortBy as string);
         const fieldB = getSortFieldValue(b, sortBy as string);
 
-        if ((fieldA ?? "") < (fieldB ?? ""))
+        const valA = fieldA ?? "";
+        const valB = fieldB ?? "";
+
+        if (valA < valB)
           return sortOrder === "asc" ? -1 : 1;
-        if ((fieldA ?? "") > (fieldB ?? ""))
+        if (valA > valB)
           return sortOrder === "asc" ? 1 : -1;
         return 0;
       })
@@ -526,7 +529,7 @@ router.get("/api/sessions/completed", async (req, res) => {
       })),
     }));
 
-    res.json({
+    return res.json({
       data: formattedSessions,
       total: sessions.length,
       page: Number(page),

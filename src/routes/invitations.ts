@@ -20,10 +20,10 @@ router.post("/api/invitations", async (req, res) => {
       data: { candidateName, candidateEmail, categoryId },
     });
     console.log("[POST] /api/invitations → Convite criado com sucesso");
-    res.status(201).json(invitation);
+    return res.status(201).json(invitation);
   } catch (error) {
     console.error("[POST] /api/invitations → Erro ao criar convite:", error);
-    res.status(500).json({ error: "Erro ao criar convite." });
+    return res.status(500).json({ error: "Erro ao criar convite." });
   }
 });
 
@@ -55,7 +55,7 @@ router.get("/api/invitations/:id", async (req, res) => {
     const questions = invitation.category.questions.map((q) => q.question);
 
     console.log("[GET] /api/invitations/:id → Convite encontrado com sucesso");
-    res.json({
+    return res.json({
       ...invitation,
       questions, // Adicionar perguntas diretamente ao objeto
     });
@@ -64,7 +64,7 @@ router.get("/api/invitations/:id", async (req, res) => {
       "[GET] /api/invitations/:id → Erro ao buscar convite:",
       error
     );
-    res.status(500).json({ error: "Erro ao buscar convite." });
+    return res.status(500).json({ error: "Erro ao buscar convite." });
   }
 });
 

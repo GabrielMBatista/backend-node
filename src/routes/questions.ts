@@ -45,7 +45,7 @@ router.get("/api/questions", async (req, res) => {
     console.log(
       `[GET] /api/questions → ${questions.length} perguntas encontradas`
     );
-    res.json({
+    return res.json({
       data: questions,
       total,
       page: Number(page),
@@ -53,7 +53,7 @@ router.get("/api/questions", async (req, res) => {
     });
   } catch (error) {
     console.error("[GET] /api/questions → Erro ao buscar perguntas:", error);
-    res.status(500).json({ error: "Erro ao buscar perguntas." });
+    return res.status(500).json({ error: "Erro ao buscar perguntas." });
   }
 });
 
@@ -82,7 +82,7 @@ router.get("/api/questions/all", async (req, res) => {
     console.log(
       `[GET] /api/questions/all → ${questions.length} perguntas encontradas`
     );
-    res.json({
+    return res.json({
       data: questions,
       total,
       page: Number(page),
@@ -93,7 +93,7 @@ router.get("/api/questions/all", async (req, res) => {
       "[GET] /api/questions/all → Erro ao buscar todas as perguntas:",
       error
     );
-    res.status(500).json({ error: "Erro ao buscar todas as perguntas." });
+    return res.status(500).json({ error: "Erro ao buscar todas as perguntas." });
   }
 });
 
@@ -117,10 +117,10 @@ router.post("/api/questions", async (req, res) => {
       "[POST] /api/questions → Pergunta criada com sucesso:",
       question
     );
-    res.status(201).json(question);
+    return res.status(201).json(question);
   } catch (error) {
     console.error("[POST] /api/questions → Erro ao criar pergunta:", error);
-    res.status(500).json({ error: "Erro ao criar pergunta." });
+    return res.status(500).json({ error: "Erro ao criar pergunta." });
   }
 });
 
@@ -147,13 +147,13 @@ router.put("/api/questions/:id", async (req, res) => {
       "[PUT] /api/questions/:id → Pergunta atualizada com sucesso:",
       question
     );
-    res.json(question);
+    return res.json(question);
   } catch (error) {
     console.error(
       "[PUT] /api/questions/:id → Erro ao atualizar pergunta:",
       error
     );
-    res.status(500).json({ error: "Erro ao atualizar pergunta." });
+    return res.status(500).json({ error: "Erro ao atualizar pergunta." });
   }
 });
 

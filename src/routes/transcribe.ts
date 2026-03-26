@@ -43,7 +43,7 @@ router.post("/api/transcribe", upload.single("audio"), async (req, res) => {
     res.json({ transcription: response.text });
   } catch (error) {
     console.error("[POST] /api/transcribe → Erro ao transcrever áudio:", error);
-    res.status(500).json({ error: "Erro ao transcrever áudio." });
+    return res.status(500).json({ error: "Erro ao transcrever áudio." });
   } finally {
     try {
       fs.unlinkSync(renamedPath);
