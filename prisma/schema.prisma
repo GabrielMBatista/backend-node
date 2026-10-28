@@ -52,6 +52,7 @@ model InterviewInvitation {
   category       Category         @relation(fields: [categoryId], references: [id])
   categoryId     String
   isCompleted    Boolean          @default(false)
+  idempotencyKey String?          @unique
   session        InterviewSession?
   createdAt      DateTime         @default(now())
 }

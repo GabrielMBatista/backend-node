@@ -12,10 +12,21 @@ import multer from "multer";
 const prisma = getPrismaClient();
 
 const router = Router();
+const AUDIO_MIME_TYPE = "audio/wav";
+
+const toAudioDataUrl = (audioBlob: Uint8Array | null | undefined) =>
+  audioBlob
+    ? `data:${AUDIO_MIME_TYPE};base64,${Buffer.from(audioBlob).toString("base64")}`
+    : null;
 const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
   fileFilter: (req, file, cb) => {
     if (file.fieldname !== "audio") {
       return cb(new Error("Campo de arquivo inesperado. Esperado: 'audio'"));
+    }
+    if (!file.mimetype.startsWith("audio/")) {
+      return cb(new Error("Tipo de arquivo inválido. Esperado áudio."));
     }
     cb(null, true);
   },
@@ -53,7 +64,7 @@ router.post("/api/sessions/start", async (req, res) => {
 
     if (session) {
       console.log(
-        "[POST] /api/sessions/start → Sessão existente encontrada, retomando..."
+        "[POST] /api/sessions/start → Sessão existente encontrada, retomando...",
       );
       return res.status(200).json(session); // Retornar sessão existente
     }
@@ -69,7 +80,7 @@ router.post("/api/sessions/start", async (req, res) => {
   } catch (error) {
     console.error(
       "[POST] /api/sessions/start → Erro ao criar ou buscar sessão:",
-      error
+      error,
     );
     return res.status(500).json({ error: "Erro ao criar ou buscar sessão." });
   }
@@ -84,7 +95,7 @@ router.post("/api/sessions/:id/finish", async (req, res) => {
 
   if (!summary || !fullReport || score === undefined) {
     console.error(
-      "[POST] /api/sessions/:id/finish → Campos obrigatórios ausentes"
+      "[POST] /api/sessions/:id/finish → Campos obrigatórios ausentes",
     );
     return res.status(400).json({ error: "Todos os campos são obrigatórios." });
   }
@@ -97,13 +108,13 @@ router.post("/api/sessions/:id/finish", async (req, res) => {
 
     console.log(
       "[POST] /api/sessions/:id/finish → Sessão finalizada com sucesso",
-      session
+      session,
     );
     return res.json(session);
   } catch (error) {
     console.error(
       "[POST] /api/sessions/:id/finish → Erro ao finalizar sessão:",
-      error
+      error,
     );
     return res.status(500).json({ error: "Erro ao finalizar sessão." });
   }
@@ -120,9 +131,9 @@ router.post(
     const { questionId, transcript } = req.body;
     const audioFile = req.file;
 
-    if (!sessionId || !questionId || !transcript) {
+    if (!sessionId || !questionId || !transcript || !audioFile) {
       console.error(
-        "[POST] /api/sessions/:id/answer → Campos obrigatórios ausentes"
+        "[POST] /api/sessions/:id/answer → Campos obrigatórios ausentes",
       );
       return res.status(400).json({
         error:
@@ -131,27 +142,48 @@ router.post(
     }
 
     try {
+      const session = await prisma.interviewSession.findUnique({
+        where: { id: sessionId },
+        include: {
+          invitation: {
+            include: { category: { include: { questions: true } } },
+          },
+        },
+      });
+      if (!session)
+        return res.status(404).json({ error: "Sessão não encontrada." });
+      const questionBelongsToSession =
+        session.invitation.category.questions.some(
+          (q) => q.questionId === questionId,
+        );
+      if (!questionBelongsToSession)
+        return res
+          .status(400)
+          .json({ error: "Pergunta não pertence à sessão." });
       const answer = await prisma.answer.create({
         data: {
           sessionId,
           questionId,
           transcript,
-          audioBlob: null, // Inicialmente nulo, será atualizado com o buffer do arquivo
+          audioBlob: audioFile.buffer,
           analysis: "Default analysis",
         },
       });
       console.log(
-        "[POST] /api/sessions/:id/answer → Resposta salva com sucesso"
+        "[POST] /api/sessions/:id/answer → Resposta salva com sucesso",
       );
-      return res.status(201).json(answer);
+      return res.status(201).json({
+        ...answer,
+        audioBlob: toAudioDataUrl(answer.audioBlob),
+      });
     } catch (error) {
       console.error(
         "[POST] /api/sessions/:id/answer → Erro ao salvar resposta:",
-        error
+        error,
       );
       return res.status(500).json({ error: "Erro ao salvar resposta." });
     }
-  }
+  },
 );
 
 // Rota para obter resumo de perguntas e respostas
@@ -177,12 +209,20 @@ router.get("/api/sessions/:id/summary", async (req, res) => {
       return res.status(404).json({ error: "Sessão não encontrada." });
     }
 
+    const serializedSession = {
+      ...session,
+      answers: session.answers.map((answer) => ({
+        ...answer,
+        audioBlob: toAudioDataUrl(answer.audioBlob),
+      })),
+    };
+
     console.log("[GET] /api/sessions/:id/summary → Resumo obtido com sucesso");
-    return res.json(session);
+    return res.json(serializedSession);
   } catch (error) {
     console.error(
       "[GET] /api/sessions/:id/summary → Erro ao obter resumo:",
-      error
+      error,
     );
     return res.status(500).json({ error: "Erro ao obter resumo." });
   }
@@ -191,7 +231,7 @@ router.get("/api/sessions/:id/summary", async (req, res) => {
 // Rota para editar transcrição de uma resposta
 router.put("/api/sessions/:sessionId/answers/:answerId", async (req, res) => {
   console.log(
-    "[PUT] /api/sessions/:sessionId/answers/:answerId → Iniciando requisição"
+    "[PUT] /api/sessions/:sessionId/answers/:answerId → Iniciando requisição",
   );
 
   const { sessionId, answerId } = req.params;
@@ -199,7 +239,7 @@ router.put("/api/sessions/:sessionId/answers/:answerId", async (req, res) => {
 
   if (!transcript) {
     console.error(
-      "[PUT] /api/sessions/:sessionId/answers/:answerId → Campo obrigatório ausente"
+      "[PUT] /api/sessions/:sessionId/answers/:answerId → Campo obrigatório ausente",
     );
     return res
       .status(400)
@@ -207,19 +247,24 @@ router.put("/api/sessions/:sessionId/answers/:answerId", async (req, res) => {
   }
 
   try {
+    const answerExists = await prisma.answer.findFirst({
+      where: { id: answerId, sessionId },
+    });
+    if (!answerExists)
+      return res.status(404).json({ error: "Resposta não pertence à sessão." });
     const answer = await prisma.answer.update({
       where: { id: answerId },
       data: { transcript },
     });
 
     console.log(
-      "[PUT] /api/sessions/:sessionId/answers/:answerId → Transcrição atualizada com sucesso"
+      "[PUT] /api/sessions/:sessionId/answers/:answerId → Transcrição atualizada com sucesso",
     );
     return res.json(answer);
   } catch (error) {
     console.error(
       "[PUT] /api/sessions/:sessionId/answers/:answerId → Erro ao atualizar transcrição:",
-      error
+      error,
     );
     return res.status(500).json({ error: "Erro ao atualizar transcrição." });
   }
@@ -245,14 +290,21 @@ router.post("/api/sessions/:id/evaluate", async (req, res) => {
 
     if (!session) {
       console.error(
-        "[POST] /api/sessions/:id/evaluate → Sessão não encontrada"
+        "[POST] /api/sessions/:id/evaluate → Sessão não encontrada",
       );
       return res.status(404).json({ error: "Sessão não encontrada." });
     }
 
+    if (session.evaluatedAt) {
+      return res.json({
+        status: "completed",
+        evaluatedAt: session.evaluatedAt,
+      });
+    }
+
     if (!session.completedAt) {
       console.log(
-        "[POST] /api/sessions/:id/evaluate → Finalizando sessão automaticamente"
+        "[POST] /api/sessions/:id/evaluate → Finalizando sessão automaticamente",
       );
 
       await prisma.interviewSession.update({
@@ -277,7 +329,7 @@ router.post("/api/sessions/:id/evaluate", async (req, res) => {
 
       console.log(
         `[Fila local] → Dados da sessão enviados para avaliação:`,
-        sessionWithAnswers.answers
+        sessionWithAnswers.answers,
       );
 
       const session = await prisma.interviewSession.findUnique({
@@ -298,7 +350,7 @@ router.post("/api/sessions/:id/evaluate", async (req, res) => {
 
       const evaluationResult = await evaluateSessionWithOpenAI(
         sessionWithAnswers.answers,
-        session.invitation.category
+        session.invitation.category,
       );
 
       if (!evaluationResult) {
@@ -311,7 +363,7 @@ router.post("/api/sessions/:id/evaluate", async (req, res) => {
 
       if (!summary || !fullReport || score === undefined) {
         console.error(
-          "[POST] /api/sessions/:id/evaluate → Erro ao processar resultado da avaliação"
+          "[POST] /api/sessions/:id/evaluate → Erro ao processar resultado da avaliação",
         );
         return; // Ensure the function resolves to void
       }
@@ -330,15 +382,16 @@ router.post("/api/sessions/:id/evaluate", async (req, res) => {
     });
 
     console.log(
-      "[POST] /api/sessions/:id/evaluate → Sessão adicionada à fila local"
+      "[POST] /api/sessions/:id/evaluate → Sessão adicionada à fila local",
     );
     return res.json({
-      message: "Sessão adicionada à fila local.",
+      status: "queued",
+      message: "Sessão adicionada à fila local; avaliação pendente.",
     });
   } catch (error) {
     console.error(
       "[POST] /api/sessions/:id/evaluate → Erro ao adicionar sessão à fila:",
-      error
+      error,
     );
     return res.status(500).json({ error: "Erro ao adicionar sessão à fila." });
   }
@@ -365,19 +418,19 @@ router.post("/api/sessions/:id/re-evaluate", async (req, res) => {
 
     if (!sessionWithAnswers) {
       console.error(
-        "[POST] /api/sessions/:id/re-evaluate → Sessão não encontrada"
+        "[POST] /api/sessions/:id/re-evaluate → Sessão não encontrada",
       );
       return res.status(404).json({ error: "Sessão não encontrada." });
     }
 
     console.log(
       "[POST] /api/sessions/:id/re-evaluate → Dados da sessão obtidos:",
-      sessionWithAnswers.answers
+      sessionWithAnswers.answers,
     );
 
     const evaluationResult = await evaluateSessionWithOpenAI(
       sessionWithAnswers.answers,
-      sessionWithAnswers.invitation.category
+      sessionWithAnswers.invitation.category,
     );
 
     if (!evaluationResult) {
@@ -390,7 +443,7 @@ router.post("/api/sessions/:id/re-evaluate", async (req, res) => {
 
     if (!summary || !fullReport || score === undefined) {
       console.error(
-        "[POST] /api/sessions/:id/re-evaluate → Erro ao processar resultado da avaliação"
+        "[POST] /api/sessions/:id/re-evaluate → Erro ao processar resultado da avaliação",
       );
       throw new Error("Erro ao processar resultado da avaliação.");
     }
@@ -409,13 +462,13 @@ router.post("/api/sessions/:id/re-evaluate", async (req, res) => {
     });
 
     console.log(
-      "[POST] /api/sessions/:id/re-evaluate → Avaliação reenviada com sucesso"
+      "[POST] /api/sessions/:id/re-evaluate → Avaliação reenviada com sucesso",
     );
     return res.json(updatedSession);
   } catch (error) {
     console.error(
       "[POST] /api/sessions/:id/re-evaluate → Erro ao reenviar avaliação:",
-      error
+      error,
     );
     return res.status(500).json({ error: "Erro ao reenviar avaliação." });
   }
@@ -494,24 +547,22 @@ router.get("/api/sessions/completed", async (req, res) => {
 
     const sortedSessions = isValidSortField
       ? sessions.sort((a, b) => {
-        const fieldA = getSortFieldValue(a, sortBy as string);
-        const fieldB = getSortFieldValue(b, sortBy as string);
+          const fieldA = getSortFieldValue(a, sortBy as string);
+          const fieldB = getSortFieldValue(b, sortBy as string);
 
-        const valA = fieldA ?? "";
-        const valB = fieldB ?? "";
+          const valA = fieldA ?? "";
+          const valB = fieldB ?? "";
 
-        if (valA < valB)
-          return sortOrder === "asc" ? -1 : 1;
-        if (valA > valB)
-          return sortOrder === "asc" ? 1 : -1;
-        return 0;
-      })
+          if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+          if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+          return 0;
+        })
       : sessions;
 
     // Aplicar paginação após a ordenação
     const paginatedSessions = sortedSessions.slice(
       (Number(page) - 1) * Number(limit),
-      Number(page) * Number(limit)
+      Number(page) * Number(limit),
     );
 
     const formattedSessions = paginatedSessions.map((session) => ({
@@ -538,7 +589,7 @@ router.get("/api/sessions/completed", async (req, res) => {
   } catch (error) {
     console.error(
       "[GET] /api/sessions/completed → Erro ao buscar sessões concluídas:",
-      error
+      error,
     );
     res.status(500).json({ error: "Erro ao buscar sessões concluídas." });
   }

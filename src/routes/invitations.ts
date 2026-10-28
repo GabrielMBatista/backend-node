@@ -9,6 +9,7 @@ router.post("/api/invitations", async (req, res) => {
   console.log("[POST] /api/invitations → Iniciando requisição");
 
   const { candidateName, candidateEmail, categoryId } = req.body;
+  const idempotencyKey = req.header("Idempotency-Key")?.trim();
 
   if (!candidateName || !candidateEmail || !categoryId) {
     console.error("[POST] /api/invitations → Campos obrigatórios ausentes");
@@ -17,11 +18,23 @@ router.post("/api/invitations", async (req, res) => {
 
   try {
     const invitation = await prisma.interviewInvitation.create({
-      data: { candidateName, candidateEmail, categoryId },
+      data: {
+        candidateName,
+        candidateEmail: candidateEmail.trim().toLowerCase(),
+        categoryId,
+        ...(idempotencyKey ? { idempotencyKey } : {}),
+      },
     });
     console.log("[POST] /api/invitations → Convite criado com sucesso");
     return res.status(201).json(invitation);
   } catch (error) {
+    // A unique-key collision is the expected concurrent retry case.
+    if ((error as { code?: string }).code === "P2002" && idempotencyKey) {
+      const existingInvitation = await prisma.interviewInvitation.findUnique({
+        where: { idempotencyKey },
+      });
+      if (existingInvitation) return res.status(200).json(existingInvitation);
+    }
     console.error("[POST] /api/invitations → Erro ao criar convite:", error);
     return res.status(500).json({ error: "Erro ao criar convite." });
   }
@@ -62,7 +75,7 @@ router.get("/api/invitations/:id", async (req, res) => {
   } catch (error) {
     console.error(
       "[GET] /api/invitations/:id → Erro ao buscar convite:",
-      error
+      error,
     );
     return res.status(500).json({ error: "Erro ao buscar convite." });
   }
